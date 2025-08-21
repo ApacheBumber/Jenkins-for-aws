@@ -1,0 +1,183 @@
+/******************
+ ** CREATED BY LUAN COSTA **
+ ** **
+ ******************/
+
+properties([
+  parameters([
+    choice(name: 'ACCOUNT', choices: ['DEV', 'HML', 'PRD'], description: 'Escolha a conta *'),
+    string(name: 'NOME', description: 'Escolha do nome do sqs mantendo o padrão *'),
+    choice(name: 'SQSTYPE', choices: ['Standard','FIFO'], description: 'Tipo do SQS *'),
+    choice(name: 'QUEUE_MODE', choices: ['Somente DLQ', 'Principal + DLQ', 'Somente Principal'], description: 'Que tipo de fila deseja criar? *'),
+    choice(name: 'REGION', choices: ['us-east-1', 'sa-east-1'], description: 'Escolha a região *'),
+    choice(name: 'TAGENV', choices: ['dev','hml','prd','preprd','beta'], description: 'Escolha da TAG DE AMBIENTE'),
+    choice(name: 'TAGCC', choices: [
+      '1111 - teste'
+    ], description: 'Escolha da TAG DE CENTRO DE CUSTO'),
+    choice(name: 'TAGVERTICAL', choices: ['ti'], description: 'Escolha da TAG VERTICAL/DEPARTAMENTO'),
+    choice(name: 'TAGSERVICO', choices: ['sqs'], description: 'Escolha da TAG SERVICO'),
+    choice(name: 'TAGCONTEXTO', choices: ['sqs'], description: 'Escolha da TAG CONTEXTO')
+  ])
+])
+
+pipeline {
+  agent any
+
+  environment {
+    BRANCH_NAME = 'main'
+    GIT_REPO = ''
+    GIT_CREDENTIALSID = ''
+  }
+
+  stages {
+
+  stage('Confirmação PRD') {
+  when {
+    expression { params.ACCOUNT in ['PRD']}
+  }
+  steps {
+    script {
+      timeout(time: 3, unit: 'DAYS') {
+        input(
+          message: """⚠️ *Atenção!*
+          Esta ação só pode ser executada pelo *time de *.
+          Caso você não pertença a esse grupo, por favor *Entra em contato com o time de  para validação*.
+
+          Deseja realizar o deployment em *Produção (PRD)*?""",
+          submitter: 'admin',
+          ok: 'Confirmar Deployment'
+          ) 
+        }
+      }
+    }
+  }
+  stage('Git Checkout') {
+      steps {
+        script {
+          sh "git log -1 --pretty=oneline"
+
+          dir("${BUILD_NUMBER}/checkout") {
+            git branch: env.BRANCH_NAME, credentialsId: env.GIT_CREDENTIALSID, url: env.GIT_REPO
+          }
+        }
+      }
+    }
+    stage('Preparar Variáveis') {
+      steps {
+        script {          
+          // Extrai o código CC antes do " -"
+          env.TAG_CC_ID = sh(
+            script: "echo '${params.TAGCC}' | sed 's/ -.*\$//' ",
+            returnStdout: true
+          ).trim()
+          
+          echo "TAG_CC_ID extraído: ${env.TAG_CC_ID}"
+        }
+      }
+    }
+
+ stage('Criar SQS') {
+  steps {
+    script {
+          def awsProfileMap = [
+            'gr.DEV': 'env-dev',
+            'gr.HML': 'env-hml',
+            'gr.PRD': 'env-prd',
+          ]
+
+      def AWS_PROFILE = awsProfileMap[params.ACCOUNT]
+      def ENVIRONMENT = params.ACCOUNT.replaceAll('gr.', '').toLowerCase()
+
+      def sqsName     = params.NOME
+      def region      = params.REGION
+      def sqsType     = params.SQSTYPE
+      def queueMode   = params.QUEUE_MODE
+
+      def attributes = [:]
+      if (sqsType == 'FIFO') {
+        attributes["FifoQueue"] = "true"
+      }
+
+      def attrPairs = attributes.collect { k, v -> "${k}=${v}" }.join(' ')
+      def mainQueueName = "${sqsName}${sqsType == 'FIFO' ? '.fifo' : ''}"
+      def dlqQueueName  = "${sqsName}-DLQ${sqsType == 'FIFO' ? '.fifo' : ''}"
+
+      def tagsJson = [
+        Name: params.NOME,
+        ENV: params.TAGENV,
+        CC: env.TAG_CC_ID,
+        Vertical: params.TAGVERTICAL,
+        Servico: params.TAGSERVICO,
+        Contexto: params.TAGCONTEXTO
+      ]
+
+      def tagsArg = groovy.json.JsonOutput.toJson(tagsJson)
+
+      def mainQueueUrl = ""
+      def dlqQueueArn  = ""
+
+      // --- Criar DLQ ---
+      if (queueMode == 'Somente DLQ' || queueMode == 'Principal + DLQ') {
+        def dlqAttr = sqsType == 'FIFO' ? "--attributes FifoQueue=true" : ""
+            sh """
+              aws sqs create-queue \
+                --profile ${AWS_PROFILE} \
+                --queue-name ${dlqQueueName} \
+                --region ${region} \
+                ${dlqAttr} \
+                --tags '${tagsArg}'
+            """
+
+        // Pega o ARN da DLQ
+        dlqQueueArn = sh(
+          script: """
+            aws sqs get-queue-attributes \
+              --profile ${AWS_PROFILE} \
+              --region ${region} \
+              --queue-url \$(aws sqs get-queue-url --queue-name ${dlqQueueName} --region ${region} --profile ${AWS_PROFILE} --output text) \
+              --attribute-names QueueArn \
+              --query 'Attributes.QueueArn' \
+              --output text
+          """,
+          returnStdout: true
+        ).trim()
+        echo "DLQ criada: ${dlqQueueArn}"
+      }
+
+          // --- Criar fila principal ---
+          if (queueMode == 'Somente Principal' || queueMode == 'Principal + DLQ') {
+            mainQueueUrl = sh(
+          script: """
+              aws sqs create-queue \
+                --profile ${AWS_PROFILE} \
+                --queue-name ${mainQueueName} \
+                --region ${region} \
+                ${attrPairs ? "--attributes ${attrPairs}" : ""} \
+                --tags '${tagsArg}' \
+                --query 'QueueUrl' \
+                --output text
+          """,
+          returnStdout: true
+        ).trim()
+        echo "Fila principal criada: ${mainQueueUrl}"
+      }
+
+      // --- Associar DLQ à fila principal ---
+      if (queueMode == 'Principal + DLQ' && mainQueueUrl && dlqQueueArn) {
+        // RedrivePolicy precisa de aspas escapadas
+        def redrivePolicy = """{\\"deadLetterTargetArn\\":\\"${dlqQueueArn}\\",\\"maxReceiveCount\\":\\"5\\"}"""
+
+        sh """
+          aws sqs set-queue-attributes \
+            --profile ${AWS_PROFILE} \
+            --region ${region} \
+            --queue-url ${mainQueueUrl} \
+            --attributes '{"RedrivePolicy":"${redrivePolicy}"}'
+        """
+        echo "DLQ associada à fila principal com RedrivePolicy"
+          }
+        }
+      }
+    }
+  }
+}
