@@ -1,0 +1,107 @@
+/******************
+ ** CREATED BY LUAN COSTA **
+ ** **
+ ******************/
+
+properties([
+  parameters([
+    choice(name: 'ACCOUNT', choices: ['DEV', 'HML', 'PRD'], description: 'Escolha a conta *'),
+    string(name: 'NOME', description: 'Escolha do nome do tópico SNS *'),
+    choice(name: 'SNSTYPE', choices: ['Standard', 'FIFO'], description: 'Tipo do tópico SNS *'),
+    choice(name: 'REGION', choices: ['us-east-1', 'sa-east-1'], description: 'Escolha a região *'),
+    choice(name: 'TAGENV', choices: ['dev','hml','prd','preprd','beta'], description: 'Escolha da TAG DE AMBIENTE'),
+    choice(name: 'TAGCC', choices: [
+      '1111 - teste
+    ], description: 'Escolha da TAG DE CENTRO DE CUSTO'),
+    choice(name: 'TAGVERTICAL', choices: ['ti'], description: 'Escolha da TAG VERTICAL/DEPARTAMENTO'),
+    choice(name: 'TAGSERVICO', choices: ['sns'], description: 'Escolha da TAG SERVICO'),
+    choice(name: 'TAGCONTEXTO', choices: ['sns'], description: 'Escolha da TAG CONTEXTO')
+      ])
+])
+
+pipeline {
+  agent any
+
+  environment {
+    BRANCH_NAME = 'main'
+    GIT_REPO = ''
+    GIT_CREDENTIALSID = ''
+  }
+
+  stages {
+
+  stage('Confirmação PRD') {
+  when {
+    expression { params.ACCOUNT in ['PRD']}
+  }
+  steps {
+    script {
+      timeout(time: 3, unit: 'DAYS') {
+        input(
+          message: """⚠️ *Atenção!*
+          Esta ação só pode ser executada pelo *time de *.
+          Caso você não pertença a esse grupo, por favor *Entra em contato com o time de  para validação*.
+
+          Deseja realizar o deployment em *Produção (PRD)*?""",
+          submitter: 'admin',
+          ok: 'Confirmar Deployment'
+          ) 
+        }
+      }
+    }
+  }
+
+    stage('Preparar Variáveis') {
+      steps {
+        script {
+          env.TAG_CC_ID = sh(
+            script: "echo '${params.TAGCC}' | sed 's/ -.*\$//'",
+            returnStdout: true
+          ).trim()
+
+          echo "TAG_CC_ID extraído: ${env.TAG_CC_ID}"
+        }
+      }
+    }
+
+    stage('Criar SNS') {
+  steps {
+    script {
+          def awsProfileMap = [
+            'gr.DEV': 'env-dev',
+            'gr.HML': 'env-hml',
+            'gr.PRD': 'env-prd',
+          ]
+
+          def AWS_PROFILE = awsProfileMap[params.ACCOUNT]
+          def ENVIRONMENT = params.ACCOUNT.replaceAll('gr.', '').toLowerCase()
+
+          def region = params.REGION
+          def snsType = params.SNSTYPE
+          def topicName = snsType == 'FIFO' ? "${params.NOME}.fifo" : params.NOME
+          def attributes = snsType == 'FIFO' ? "--attributes FifoTopic=true,ContentBasedDeduplication=true" : ""
+
+          def tagsList = [
+            "Key=Name,Value=${params.NOME}",
+            "Key=ENV,Value=${params.TAGENV}",
+            "Key=CC,Value=${env.TAG_CC_ID}",
+            "Key=Vertical,Value=${params.TAGVERTICAL}",
+            "Key=Servico,Value=${params.TAGSERVICO}",
+            "Key=Contexto,Value=${params.TAGCONTEXTO}"
+          ]
+
+          def tagsArg = tagsList.join(' ')
+
+          sh """
+            aws sns create-topic \
+              --profile ${AWS_PROFILE} \
+              --name ${topicName} \
+              --region ${region} \
+              ${attributes} \
+              --tags ${tagsArg}
+          """
+        }
+      }
+    }
+  }
+}
