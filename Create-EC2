@@ -1,0 +1,565 @@
+properties([
+  parameters([
+    choice(name: 'ACCOUNT', choices: ['DEV', 'HML', 'PRD'], description: 'Escolha a conta *'),
+    string(name: 'NOME', description: 'Escolha do nome da Instância EC2. Exemplo , mantendo o padrão *'),
+    string(name: 'AMI', 
+            description: '''Digite o código da AMI que será utilizada na Instância EC2.\n
+            ami-02457590d33d576c3 / AMAZON LINUX 2023 NVI
+            ami-02f06bef654d6c27b / AMAZON LINUX 2023 SAO
+            ami-0fa71268a899c2733 / WINDOWS SERVER 2025 NVI
+            ami-0efbe79a4e1e1cade / WINDOWS SERVER 2025 SAO
+            ami-01761b09472586fc5 / WINDOWS SERVER 2022 Base - SAO
+            Ou outra de sua escolha.
+            '''),
+        choice(name: 'INSTANCETYPE', choices: ['t3.medium', 't3a.medium', 't3.xlarge', 't3a.xlarge', 'r7.xlarge', 'r7a.xlarge', 'i4i.large', 'i4i.xlarge', 'c7i.large' , 'c7i.xlarge' , 'c7i.2xlarge'], description: 'Escolha da instance type que sere utilizada na Instância EC2 *'),
+        choice(name: 'COUNT', choices: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'], description: 'Escolha quantidade de instancias *'),
+
+    choice(name: 'REGION', choices: [' add region here '], description: 'Escolha a região *'),
+
+        [$class: 'CascadeChoiceParameter',
+      choiceType: 'PT_SINGLE_SELECT',
+      filterLength: 1,
+      name: 'SUBNET',
+      description: 'Subnets conforme conta',
+      randomName: 'params_SUBNET',
+      referencedParameters: 'ACCOUNT',
+      script: [
+       $class: 'GroovyScript',
+        fallbackScript: [sandbox: true, script: 'return ["ERRO"]'],
+        script: [sandbox: true, script: '''
+          def account = ACCOUNT
+          switch(account) {
+            case "DEV":
+             return [
+                " SUBNETS PÚBLICAS - Env - Region ",
+                "subnet-id - subnet-name-env-region",
+                "",
+                " SUBNETS PRIVADAS - ENV - Region",
+                "subnet-id - subnet-name-env-region",
+                "",
+               " SUBNETS PÚBLICAS - Env - Region ",
+                subnet-id - subnet-name-env-region",
+                "",
+                " SUBNETS PRIVADAS - ENV - Region",
+                "subnet-id - subnet-name-env-region"
+                ]
+
+            case "HML":
+                return [
+                " SUBNETS PÚBLICAS - Env - Region ",
+                "subnet-id - subnet-name-env-region",
+                "",
+                " SUBNETS PRIVADAS - ENV - Region",
+                "subnet-id - subnet-name-env-region",
+                "",
+               " SUBNETS PÚBLICAS - Env - Region ",
+                subnet-id - subnet-name-env-region",
+                "",
+                " SUBNETS PRIVADAS - ENV - Region",
+                "subnet-id - subnet-name-env-region"
+                ]
+
+            case "PRD":
+              return [
+                " SUBNETS PÚBLICAS - Env - Region ",
+                "subnet-id - subnet-name-env-region",
+                "",
+                " SUBNETS PRIVADAS - ENV - Region",
+                "subnet-id - subnet-name-env-region",
+                "",
+               " SUBNETS PÚBLICAS - Env - Region ",
+                subnet-id - subnet-name-env-region",
+                "",
+                " SUBNETS PRIVADAS - ENV - Region",
+                "subnet-id - subnet-name-env-region"
+                ]
+                
+            default:
+              return ["Selecione uma conta válida"]
+          }
+        ''']
+      ]
+    ],
+
+    [$class: 'CascadeChoiceParameter',
+      choiceType: 'PT_SINGLE_SELECT',
+      filterLength: 1,
+      name: 'KEYPAIR',
+      description: 'KeyPair conforme conta',
+      randomName: 'params_KEYPAIR',
+      referencedParameters: 'ACCOUNT',
+      script: [
+        $class: 'GroovyScript',
+        fallbackScript: [sandbox: true, script: 'return ["ERRO"]'],
+        script: [sandbox: true, script: '''
+          switch(ACCOUNT) {
+                      case "DEV":
+              return ["Keypair-name    - Env-Region",
+                      "Keypair-name    - Env-Region",]
+            case "HML":
+              return ["Keypair-name    - Env-Region",
+                      "Keypair-name    - Env-Region",]
+            case "PRD":
+              return ["Keypair-name    - Env-Region",
+                      "Keypair-name    - Env-Region",
+              ]
+
+              default:
+              return ["Nenhuma conta válida selecionada"]
+          }
+                       ''']
+        ]
+    ],
+    [$class: 'CascadeChoiceParameter',
+      choiceType: 'PT_SINGLE_SELECT',
+      filterLength: 1,
+      name: 'SECURITYGROUP',
+      description: 'SecurityGroup conforme conta',
+      randomName: 'params_SG',
+      referencedParameters: 'ACCOUNT',
+      script: [
+        $class: 'GroovyScript',
+        fallbackScript: [sandbox: true, script: 'return ["ERRO"]'],
+        script: [sandbox: true, script: '''
+          switch(ACCOUNT) {
+            case "DEV":
+              return ["sg-id - SG -name - region-env",
+                      "sg-id - SG -name - region-env"
+                      ]
+            case "HML":
+              return ["sg-id - SG -name - region-env",
+                      "sg-id - SG -name - region-env"
+                      ]
+            case "PRD":
+              return [
+                      "sg-id - SG -name - region-env",
+                      "sg-id - SG -name - region-env"
+                      ]
+            default:
+              return ["Selecione uma conta válida"]
+          }
+        ''']
+      ]
+    ],
+        [$class: 'CascadeChoiceParameter',
+      choiceType: 'PT_SINGLE_SELECT',
+      filterLength: 1,
+      name: 'SERVICEBACKUP',
+      description: 'Backup conforme região',
+      randomName: 'params_SERVICEBACKUP',
+      referencedParameters: 'REGION',
+      script: [
+        $class: 'GroovyScript',
+        fallbackScript: [sandbox: true, script: 'return ["ERRO"]'],
+        script: [sandbox: true, script: '''
+          switch(REGION) {
+            case "us-east-1":
+              return ["Service_Backup_USE1"]
+            case "sa-east-1":
+              return ["Service_Backup_SAE1"]
+            default:
+              return ["Região inválida"]
+          }
+        ''']
+      ]
+    ],  
+        choice(  name: 'DISCO', choices: ['default','30','40','50','60','80','100','200','300','400','500','1024'],
+            defaultValue: 'default',
+            description: 'Tamanho do disco EBS em GB (ou "default" para usar o tamanho da AMI)'),
+        choice(name: 'TAGENV', 
+        choices: ['dev','hml','prd'], description: 'Escolha da TAG DE AMBIENTE'),
+        choice(name: 'TAGCC', choices: [
+          1111- teste
+        ], description: 'Escolha da TAG DE CENTRO DE CUSTO'),
+        choice(name: 'TAGBKP', 
+        choices: ['EC2'], description: 'Escolha da TAG DE backup'),
+        choice(name: 'TAGVERTICAL', 
+        choices: ['ti'], description: 'Escolha da TAG VERTICAL/DEPARTAMENTO'),
+        choice(name: 'TAGSERVICO', choices: ['aplicacao','iis','database','fileserver','firewall'],     description: 'Escolha da TAG SERVICO'),
+        choice(name: 'TAGCONTEXTO', choices: ['ec2'],      description: 'Escolha da TAG CONTEXTO'),
+        text(name: 'USERDATA', defaultValue: '', description: 'Script de UserData (bash ou cloud-init). Será convertido para base64 automaticamente.')
+
+  ])
+])
+
+pipeline {
+  agent any
+
+  environment {
+    BRANCH_NAME = 'main'
+    GIT_REPO = ''
+    GIT_CREDENTIALSID = ''
+  }
+
+  options {
+    retry(0)
+    timestamps()
+    disableConcurrentBuilds()
+    timeout(time: 1, unit: 'HOURS')
+  }
+
+  stages { 
+
+    /******************
+     ** AMBIENTE DEV **
+     ******************/
+    stage('DEV: Criando Instância EC2') {
+      when {
+        expression { params.ACCOUNT == 'DEV' }
+      }
+      environment {
+        AWS_PROFILE = 'dev'
+        ENVIRONMENT = 'dev'
+        NAME1 = "${params.NOME}"
+        REGION1 = "${params.REGION}"
+        AMI1 = "${params.AMI}"
+        INSTANCETYPE1 = "${params.INSTANCETYPE}"
+        COUNT1 = "${params.COUNT}"
+        SUBNET1 = "${params.SUBNET}"
+        DISCO1 = "${params.DISCO}"
+        SECURITYGROUP1 = "${params.SECURITYGROUP}"
+        KEYPAIR1 = "${params.KEYPAIR}"
+        AWS_IAM_ROLE = 'Name=iam-role2'
+        TAGBKP1 = "${params.TAGBKP}"
+        SERVICEBACKUP1 = "${params.SERVICEBACKUP}"
+      }
+      steps {
+        script {
+          def TAG_CC_ID = sh(
+            script: "echo '${params.TAGCC}' | sed 's/ -.*\$//' ",
+            returnStdout: true
+          ).trim()
+
+          echo "TAG_CC_ID extraído: ${TAG_CC_ID}"
+
+          def USERDATA64 = ''
+          def USERDATA_OPTION = ''
+          if (params.USERDATA?.trim()) {
+            writeFile file: 'userdata.sh', text: params.USERDATA
+            USERDATA64 = sh(script: 'base64 userdata.sh | tr -d "\\n"', returnStdout: true).trim()
+            USERDATA_OPTION = "--user-data '${USERDATA64}'"
+          }
+
+          def BLOCK_DEVICE_OPTION = ''
+          if (params.DISCO && params.DISCO != 'default') {
+            BLOCK_DEVICE_OPTION = "--block-device-mappings '[{\"DeviceName\":\"/dev/xvda\",\"Ebs\":{\"VolumeSize\":${params.DISCO},\"VolumeType\":\"gp3\",\"DeleteOnTermination\":true}}]'"
+          }
+
+          dir("${BUILD_NUMBER}/DEV") {
+            sh """
+              set -ex
+
+              aws ec2 run-instances --profile ${AWS_PROFILE} \\
+                --region ${REGION1} \\
+                --image-id ${AMI1} \\
+                --instance-type ${INSTANCETYPE1} \\
+                --count ${COUNT1} \\
+                --subnet-id \$(echo "${SUBNET1}" | sed 's/ -.*\$//') \\
+                --security-group-ids \$(echo "${SECURITYGROUP1}" | sed 's/ -.*\$//') \\
+                --iam-instance-profile ${AWS_IAM_ROLE} \\
+                --key-name \$(echo "${KEYPAIR1}" | sed 's/ -.*\$//') \\
+                --disable-api-termination \\
+                --metadata-options HttpTokens=required,HttpEndpoint=enabled \\
+                ${BLOCK_DEVICE_OPTION} \\
+                ${USERDATA_OPTION} \\
+                --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NAME1}},{Key=${SERVICEBACKUP1},Value=${TAGBKP1}},{Key=Region,Value=${REGION1}},{Key=ENV,Value=${TAGENV}},{Key=CC,Value=${TAG_CC_ID}},{Key=Vertical,Value=${TAGVERTICAL}},{Key=Servico,Value=${TAGSERVICO}},{Key=Contexto,Value=${TAGCONTEXTO}}]"
+
+              exit 0
+            """
+          }
+        }
+      }
+    }
+
+    /******************
+     ** AMBIENTE HML **
+     ******************/
+    stage('HML: Criando Instância EC2') {
+      when {
+        expression { params.ACCOUNT == 'HML' }
+      }
+      environment {
+        AWS_PROFILE = 'hml'
+        ENVIRONMENT = 'hml'
+        NAME1 = "${params.NOME}"
+        REGION1 = "${params.REGION}"
+        AMI1 = "${params.AMI}"
+        INSTANCETYPE1 = "${params.INSTANCETYPE}"
+        COUNT1 = "${params.COUNT}"
+        SUBNET1 = "${params.SUBNET}"
+        DISCO1 = "${params.DISCO}"
+        SECURITYGROUP1 = "${params.SECURITYGROUP}"
+        KEYPAIR1 = "${params.KEYPAIR}"
+        AWS_IAM_ROLE = 'Name=Iam-role::'
+        TAGBKP1 = "${params.TAGBKP}"
+        SERVICEBACKUP1 = "${params.SERVICEBACKUP}"
+      }
+      steps {
+        script {
+          def TAG_CC_ID = sh(
+            script: "echo '${params.TAGCC}' | sed 's/ -.*\$//' ",
+            returnStdout: true
+          ).trim()
+
+          echo "TAG_CC_ID extraído: ${TAG_CC_ID}"
+
+          def USERDATA64 = ''
+          def USERDATA_OPTION = ''
+          if (params.USERDATA?.trim()) {
+            writeFile file: 'userdata.sh', text: params.USERDATA
+            USERDATA64 = sh(script: 'base64 userdata.sh | tr -d "\\n"', returnStdout: true).trim()
+            USERDATA_OPTION = "--user-data '${USERDATA64}'"
+          }
+
+          def BLOCK_DEVICE_OPTION = ''
+          if (params.DISCO && params.DISCO != 'default') {
+            BLOCK_DEVICE_OPTION = "--block-device-mappings '[{\"DeviceName\":\"/dev/xvda\",\"Ebs\":{\"VolumeSize\":${params.DISCO},\"VolumeType\":\"gp3\",\"DeleteOnTermination\":true}}]'"
+          }
+
+          dir("${BUILD_NUMBER}/HML") {
+            sh """
+              set -ex
+
+              aws ec2 run-instances --profile ${AWS_PROFILE} \\
+                --region ${REGION1} \\
+                --image-id ${AMI1} \\
+                --instance-type ${INSTANCETYPE1} \\
+                --count ${COUNT1} \\
+                --subnet-id \$(echo "${SUBNET1}" | sed 's/ -.*\$//') \\
+                --security-group-ids \$(echo "${SECURITYGROUP1}" | sed 's/ -.*\$//') \\
+                --iam-instance-profile ${AWS_IAM_ROLE} \\
+                --key-name \$(echo "${KEYPAIR1}" | sed 's/ -.*\$//') \\
+                --disable-api-termination \\
+                --metadata-options HttpTokens=required,HttpEndpoint=enabled \\
+                ${BLOCK_DEVICE_OPTION} \\
+                ${USERDATA_OPTION} \\
+                --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NAME1}},{Key=${SERVICEBACKUP1},Value=${TAGBKP1}},{Key=Region,Value=${REGION1}},{Key=ENV,Value=${TAGENV}},{Key=CC,Value=${TAG_CC_ID}},{Key=Vertical,Value=${TAGVERTICAL}},{Key=Servico,Value=${TAGSERVICO}},{Key=Contexto,Value=${TAGCONTEXTO}}]"
+
+              exit 0
+            """
+          }
+        }
+      }
+    }
+
+    /******************
+     ** AMBIENTE PRD **
+     ******************/
+    stage('Confirmação PRD') {
+      when {
+        expression { params.ACCOUNT in ['PRD'] }
+      }
+      steps {
+        script {
+          timeout(time: 3, unit: 'DAYS') {
+            input(
+              message: """⚠️ *Atenção!*
+Esta ação só pode ser executada pelo *time de *.
+Caso você não pertença a esse grupo, por favor *Entra em contato com o time de  para validação*.
+
+Deseja realizar o deployment em *Produção (PRD)*?""",
+              submitter: 'admin',
+              ok: 'Confirmar Deployment'
+            )
+          }
+        }
+      }
+    }
+
+    stage('Git Checkout') {
+      steps {
+        script {
+          sh "git log -1 --pretty=oneline"
+
+          dir("${BUILD_NUMBER}/checkout") {
+            git branch: env.BRANCH_NAME, credentialsId: env.GIT_CREDENTIALSID, url: env.GIT_REPO
+          }
+        }
+      }
+    }
+
+    stage('PRD: Criando Instância EC2') {
+      when {
+        expression { params.ACCOUNT == 'PRD' }
+      }
+      environment {
+        AWS_PROFILE = 'prd'
+        ENVIRONMENT = 'prd'
+        NAME1 = "${params.NOME}"
+        REGION1 = "${params.REGION}"
+        AMI1 = "${params.AMI}"
+        INSTANCETYPE1 = "${params.INSTANCETYPE}"
+        COUNT1 = "${params.COUNT}"
+        SUBNET1 = "${params.SUBNET}"
+        DISCO1 = "${params.DISCO}"
+        SECURITYGROUP1 = "${params.SECURITYGROUP}"
+        KEYPAIR1 = "${params.KEYPAIR}"
+        AWS_IAM_ROLE = 'Name=iam-role'
+        TAGBKP1 = "${params.TAGBKP}"
+        SERVICEBACKUP1 = "${params.SERVICEBACKUP}"
+      }
+      steps {
+        script {
+          def TAG_CC_ID = sh(
+            script: "echo '${params.TAGCC}' | sed 's/ -.*\$//' ",
+            returnStdout: true
+          ).trim()
+
+          echo "TAG_CC_ID extraído: ${TAG_CC_ID}"
+
+          def USERDATA64 = ''
+          def USERDATA_OPTION = ''
+          if (params.USERDATA?.trim()) {
+            writeFile file: 'userdata.sh', text: params.USERDATA
+            USERDATA64 = sh(script: 'base64 userdata.sh | tr -d "\\n"', returnStdout: true).trim()
+            USERDATA_OPTION = "--user-data '${USERDATA64}'"
+          }
+
+          def BLOCK_DEVICE_OPTION = ''
+          if (params.DISCO && params.DISCO != 'default') {
+            BLOCK_DEVICE_OPTION = "--block-device-mappings '[{\"DeviceName\":\"/dev/xvda\",\"Ebs\":{\"VolumeSize\":${params.DISCO},\"VolumeType\":\"gp3\",\"DeleteOnTermination\":true}}]'"
+          }
+
+          dir("${BUILD_NUMBER}/PRD") {
+            sh """
+              set -ex
+
+              aws ec2 run-instances --profile ${AWS_PROFILE} \\
+                --region ${REGION1} \\
+                --image-id ${AMI1} \\
+                --instance-type ${INSTANCETYPE1} \\
+                --count ${COUNT1} \\
+                --subnet-id \$(echo "${SUBNET1}" | sed 's/ -.*\$//') \\
+                --security-group-ids \$(echo "${SECURITYGROUP1}" | sed 's/ -.*\$//') \\
+                --iam-instance-profile ${AWS_IAM_ROLE} \\
+                --key-name \$(echo "${KEYPAIR1}" | sed 's/ -.*\$//') \\
+                --disable-api-termination \\
+                --metadata-options HttpTokens=required,HttpEndpoint=enabled \\
+                ${BLOCK_DEVICE_OPTION} \\
+                ${USERDATA_OPTION} \\
+                --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NAME1}},{Key=${SERVICEBACKUP1},Value=${TAGBKP1}},{Key=Region,Value=${REGION1}},{Key=ENV,Value=${TAGENV}},{Key=CC,Value=${TAG_CC_ID}},{Key=Vertical,Value=${TAGVERTICAL}},{Key=Servico,Value=${TAGSERVICO}},{Key=Contexto,Value=${TAGCONTEXTO}}]"
+
+              exit 0
+            """
+          }
+        }
+      }
+    }
+
+    /******************
+     ** AMBIENTE Extra **
+     ******************/
+/*    stage('Extra-env: Criando Instância EC2') {
+      when {
+        expression { params.ACCOUNT == 'entra-env' }
+      }
+      environment {
+        AWS_PROFILE = 'Extra-env'
+        ENVIRONMENT = 'Extra-env'
+        NAME1 = "${params.NOME}"
+        REGION1 = "${params.REGION}"
+        AMI1 = "${params.AMI}"
+        INSTANCETYPE1 = "${params.INSTANCETYPE}"
+        COUNT1 = "${params.COUNT}"
+        SUBNET1 = "${params.SUBNET}"
+        DISCO1 = "${params.DISCO}"
+        SECURITYGROUP1 = "${params.SECURITYGROUP}"
+        KEYPAIR1 = "${params.KEYPAIR}"
+        AWS_IAM_ROLE = 'Name= iam-role'
+        TAGBKP1 = "${params.TAGBKP}"
+        SERVICEBACKUP1 = "${params.SERVICEBACKUP}"
+      }
+      steps {
+        script {
+          def TAG_CC_ID = sh(
+            script: "echo '${params.TAGCC}' | sed 's/ -.*\$//' ",
+            returnStdout: true
+          ).trim()
+
+          echo "TAG_CC_ID extraído: ${TAG_CC_ID}"
+
+          def USERDATA64 = ''
+          def USERDATA_OPTION = ''
+          if (params.USERDATA?.trim()) {
+            writeFile file: 'userdata.sh', text: params.USERDATA
+            USERDATA64 = sh(script: 'base64 userdata.sh | tr -d "\\n"', returnStdout: true).trim()
+            USERDATA_OPTION = "--user-data '${USERDATA64}'"
+          }
+
+          def BLOCK_DEVICE_OPTION = ''
+          if (params.DISCO && params.DISCO != 'default') {
+            BLOCK_DEVICE_OPTION = "--block-device-mappings '[{\"DeviceName\":\"/dev/xvda\",\"Ebs\":{\"VolumeSize\":${params.DISCO},\"VolumeType\":\"gp3\",\"DeleteOnTermination\":true}}]'"
+          }
+
+dir("${BUILD_NUMBER}/Extra-Env") {
+            sh """
+              set -ex
+
+              aws ec2 run-instances --profile ${AWS_PROFILE} \\
+                --region ${REGION1} \\
+                --image-id ${AMI1} \\
+                --instance-type ${INSTANCETYPE1} \\
+                --count ${COUNT1} \\
+                --subnet-id \$(echo "${SUBNET1}" | sed 's/ -.*\$//') \\
+                --security-group-ids \$(echo "${SECURITYGROUP1}" | sed 's/ -.*\$//') \\
+                --iam-instance-profile ${AWS_IAM_ROLE} \\
+                --key-name \$(echo "${KEYPAIR1}" | sed 's/ -.*\$//') \\
+                --disable-api-termination \\
+                --metadata-options HttpTokens=required,HttpEndpoint=enabled \\
+                ${BLOCK_DEVICE_OPTION} \\
+                ${USERDATA_OPTION} \\
+                --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NAME1}},{Key=${SERVICEBACKUP1},Value=${TAGBKP1}},{Key=Region,Value=${REGION1}},{Key=ENV,Value=${TAGENV}},{Key=CC,Value=${TAG_CC_ID}},{Key=Vertical,Value=${TAGVERTICAL}},{Key=Servico,Value=${TAGSERVICO}},{Key=Contexto,Value=${TAGCONTEXTO}}]"
+
+              exit 0
+            """
+          }*/
+        }
+      }
+    }
+  }
+
+/*  post {
+  success {
+    script {
+      def emailMap = [
+        'DEV': ['email@domain.com'],
+        'HML': ['email@domain.com'],
+        'PRD': ['email@domain.com'],
+      ]
+
+      def recipients = emailMap.get(params.ACCOUNT, ['email@domain.com'])
+      def joinedRecipients = recipients.join(',')
+
+      def emailBody = """Successfully Job: ${env.BUILD_URL}
+
+---------------------------
+
+- Instância ${params.NOME} criada com sucesso!
+
+- Favor:
+  - Adicionar o novo servidor na planilha de controle EC2
+  - Adicionar AntiVirus
+  - Atualizar Windows Update
+  - Instalar Client Telnet
+  - Colocar no domínio, etc...
+"""
+
+      dir("${BUILD_NUMBER}") {
+        cleanWs()
+      }
+
+      mail(
+        to: joinedRecipients,
+        subject: "Instância ${params.NOME} Criada com Sucesso: ${currentBuild.fullDisplayName}",
+        body: emailBody
+      )
+    }
+  }
+
+  failure {
+    mail to: 'email@domain.com',
+         subject: "Failed Pipeline: ${currentBuild.fullDisplayName}",
+         body: "Failed Job: ${env.BUILD_URL}"
+  }
+}*/
+}
