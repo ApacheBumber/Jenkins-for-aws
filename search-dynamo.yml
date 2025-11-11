@@ -1,0 +1,156 @@
+name: Executar Pesquisa de DynamoDB
+
+on:
+  workflow_dispatch:
+    inputs:
+      account: 
+        description: 'ESCOLHA sua conta'
+        required: true
+        default: MASTER
+        type: choice
+        options:
+          - account1
+          - account2
+          - account3
+
+      environment:
+        description: 'ESCOLHA O AMBIENTE'
+        required: true
+        default: DEV
+        type: choice
+        options:
+          - DEV
+          - HML
+          - PRD
+        
+      search_value:
+        description: 'Valor a ser buscado nos Dynamo (opcional)'
+        required: false
+        default: 'teste.com.br'
+      az:
+        description: 'Availability Zone (ex: us-east-1a, us-east-1b...)'
+        required: false
+        default: 'us-east-1'
+
+env:
+  DEV_ENV_NAME: "dev"
+  HML_ENV_NAME: "hml"
+  PRD_ENV_NAME: "prd"
+
+jobs:
+  search-DynamoDB:
+    runs-on: self-hosted
+
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v3
+
+      - name: Definindo variáveis de ambiente
+        shell: bash
+        run: |
+          echo "Definindo Variáveis para a Conta : ${{ github.event.inputs.account }}"
+          echo "Definindo variáveis para o ambiente: ${{ github.event.inputs.environment }}"
+
+          ACCOUNT="${{ github.event.inputs.account }}"
+          ENV="${{ github.event.inputs.environment }}"
+
+          #
+          # ================================
+          # Account1
+          # ================================
+          if [[ "$ACCOUNT" == "Account" ]]; then                                                                      # alterar account - Por valor existente
+            if [[ "$ENV" == "DEV" ]]; then
+              echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS}}" >> $GITHUB_ENV                                               # alterar secrets - Por valor existente
+              echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS }}" >> $GITHUB_ENV                                          # alterar secrets - Por valor existente
+              echo "ROLE_AWS_AUTH=${{ env.AWS_AUTH }}" >> $GITHUB_ENV                                                 # alterar Role - Por valor existente
+              echo "ENV_NAME=${{ env.DEV_ENV_NAME }}" >> $GITHUB_ENV
+
+            elif [[ "$ENV" == "HML" ]]; then
+              echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS }}" >> $GITHUB_ENV                                              # alterar secrets - Por valor existente
+              echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS}}" >> $GITHUB_ENV                                           # alterar secrets - Por valor existente
+              echo "ROLE_AWS_AUTH=${{ env. }}" >> $GITHUB_ENV                                                         # alterar secrets - Por valor existente
+              echo "ENV_NAME=${{ env.HML_ENV_NAME }}" >> $GITHUB_ENV
+
+            elif [[ "$ENV" == "PRD" ]]; then                                                                          # alterar secrets - Por valor existente
+              echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS }}" >> $GITHUB_ENV                                              # alterar secrets - Por valor existente
+              echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS }}" >> $GITHUB_ENV                                          # alterar secrets - Por valor existente
+              echo "ROLE_AWS_AUTH=${{ env.PRD_ }}" >> $GITHUB_ENV                                                     # alterar role - Por valor existente
+              echo "ENV_NAME=${{ env.PRD_ENV_NAME }}" >> $GITHUB_ENV
+            fi
+          fi
+
+          #
+          # ================================
+          # account2
+          # ================================
+          if [[ "$ACCOUNT" == "ANALYTICS" ]]; then
+            if [[ "$ENV" == "DEV" ]]; then
+              echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID_ANALYTICS_DEV }}" >> $GITHUB_ENV
+              echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY_ANALYTICS_DEV }}" >> $GITHUB_ENV
+              echo "ROLE_AWS_AUTH=${{ env.DEV_ROLE_AWS_AUTH }}" >> $GITHUB_ENV
+              echo "ENV_NAME=${{ env.DEV_ENV_NAME }}" >> $GITHUB_ENV
+
+            elif [[ "$ENV" == "HML" ]]; then
+              echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS }}" >> $GITHUB_ENV
+              echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS}}" >> $GITHUB_ENV
+              echo "ROLE_AWS_AUTH=${{ env.HML_ROLE_AWS_AUTH }}" >> $GITHUB_ENV
+              echo "ENV_NAME=${{ env.HML_ENV_NAME }}" >> $GITHUB_ENV
+
+            elif [[ "$ENV" == "PRD" ]]; then
+              echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_}}" >> $GITHUB_ENV
+              echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS }}" >> $GITHUB_ENV
+              echo "ROLE_AWS_AUTH=${{ env.PRD_ }}" >> $GITHUB_ENV
+              echo "ENV_NAME=${{ env.PRD_ENV_NAME }}" >> $GITHUB_ENV
+            fi
+          fi
+
+          #
+          # ================================
+          # account3 (Independente do ambiente)
+          # ================================
+          if [[ "$ACCOUNT" == "GR.REDES" ]]; then
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS }}" >> $GITHUB_ENV
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY_GR_REDES }}" >> $GITHUB_ENV
+            echo "ROLE_AWS_AUTH=${{ env.PRD_ROLE_AWS_AUTH }}" >> $GITHUB_ENV
+          fi
+
+          #
+          # ================================
+          # VARIÁVEIS ADICIONAIS
+          # ================================
+          echo "SEARCH_VALUE=${{ github.event.inputs.search_value }}" >> $GITHUB_ENV
+          echo "AZ=${{ github.event.inputs.az }}" >> $GITHUB_ENV
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.}}                                                 # alterar secrets - Por valor existente
+          aws-secret-access-key: ${{ env. }}                                         # alterar secrets - Por valor existente
+          aws-region: ${{ github.event.inputs.az }}  # 👈 variável dinâmica      - name: Debug das variáveis
+       
+      - name: Debug das variáveis
+        run: |
+          echo "-----------------------------------"
+          echo "✅ Ambiente: $ENV_NAME"
+          echo "🌎 Região: $REGION"
+          echo "🔍 Valor de busca: $SEARCH_VALUE"
+          echo "AZ: $AZ"
+          echo "-----------------------------------"
+          aws sts get-caller-identity
+          echo "✅ AWS CLI configurado corretamente"
+          echo "-----------------------------------"
+
+      - name: Permitir execução do script
+        run: chmod +x ./Search-dynamo/search-dynamo.sh
+
+      - name: Executar busca de DynamoDB
+        run: ./Search-dynamo/search-dynamo.sh "$SEARCH_VALUE" "$AZ"
+        
+      - name: Upload do exclude-tabelas.txt
+        uses: actions/upload-artifact@v4
+        with:
+          name: exclude
+          path: Search-dynamo/exclude-tabelas.txt
+          retention-days: 1
+
